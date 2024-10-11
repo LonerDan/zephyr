@@ -42,6 +42,10 @@ config SOC_STM32F070XB
 	bool
 	select SOC_SERIES_STM32F0X
 
+config SOC_STM32F070X6
+	bool
+	select SOC_SERIES_STM32F0X
+
 config SOC_STM32F072X8
 	bool
 	select SOC_SERIES_STM32F0X
@@ -68,6 +72,7 @@ config SOC
 	default "stm32f042x6" if SOC_STM32F042X6
 	default "stm32f051x8" if SOC_STM32F051X8
 	default "stm32f070xb" if SOC_STM32F070XB
+	default "stm32f070x6" if SOC_STM32F070X6
 	default "stm32f072xb" if SOC_STM32F072X8 || SOC_STM32F072XB
 	default "stm32f091xc" if SOC_STM32F091XC
 	default "stm32f098xx" if SOC_STM32F098XX
