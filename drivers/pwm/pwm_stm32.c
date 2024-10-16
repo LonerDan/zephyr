@@ -95,6 +95,8 @@ struct pwm_stm32_config {
 #ifdef CONFIG_PWM_CAPTURE
 	void (*irq_config_func)(const struct device *dev);
 	const bool four_channel_capture_support;
+	uint8_t input_filter_div;
+	uint8_t input_filter_n;
 #endif /* CONFIG_PWM_CAPTURE */
 };
 
@@ -463,6 +465,70 @@ static int init_capture_channels(const struct device *dev, uint32_t channel,
 	LL_TIM_IC_StructInit(&ic);
 	ic.ICPrescaler = TIM_ICPSC_DIV1;
 	ic.ICFilter = LL_TIM_IC_FILTER_FDIV1;
+
+	// TODO: extract to its own function?
+	if (cfg->input_filter_div && cfg->input_filter_n) {
+		switch (cfg->input_filter_div) {
+			case 2:
+				switch (cfg->input_filter_n) {
+					case 6:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV2_N6;
+						break;
+					case 8:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV2_N8;
+						break;
+				}
+				break;
+			case 4:
+				switch (cfg->input_filter_n) {
+					case 6:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV4_N6;
+						break;
+					case 8:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV4_N8;
+						break;
+				}
+				break;
+			case 8:
+				switch (cfg->input_filter_n) {
+					case 6:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV8_N6;
+						break;
+					case 8:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV8_N8;
+						break;
+				}
+				break;
+			case 16:
+				switch (cfg->input_filter_n) {
+					case 5:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV16_N5;
+						break;
+					case 6:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV16_N6;
+						break;
+					case 8:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV16_N8;
+						break;
+				}
+				break;
+			case 32:
+				switch (cfg->input_filter_n) {
+					case 5:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV32_N5;
+						break;
+					case 6:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV32_N6;
+						break;
+					case 8:
+						ic.ICFilter = LL_TIM_IC_FILTER_FDIV32_N8;
+						break;
+				}
+				break;
+		}
+		if (ic.ICFilter == LL_TIM_IC_FILTER_FDIV1) // Invalid div/n combo
+			return -EINVAL;
+	}
 
 	/* Setup main channel */
 	ic.ICActiveInput = LL_TIM_ACTIVEINPUT_DIRECTTI;
@@ -868,10 +934,41 @@ static void pwm_stm32_irq_config_func_##index(const struct device *dev)		\
 }
 #define CAPTURE_INIT(index)                                                                        \
 	.irq_config_func = pwm_stm32_irq_config_func_##index,                                      \
-	.four_channel_capture_support = DT_INST_PROP(index, four_channel_capture_support)
+	.four_channel_capture_support = DT_INST_PROP(index, four_channel_capture_support),         \
+	.input_filter_div = DT_INST_PROP_OR(index, st_icf_div, 0),                                 \
+	.input_filter_n = DT_INST_PROP_OR(index, st_icf_n, 0)
 #else
 #define IRQ_CONFIG_FUNC(index)
 #define CAPTURE_INIT(index)
+#endif /* CONFIG_PWM_CAPTURE */
+#ifdef CONFIG_PWM_CAPTURE
+#define CAPTURE_CHECK(index)									      \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(index, st_icf_div),					      \
+		    BUILD_ASSERT(DT_INST_NODE_HAS_PROP(index, st_icf_n),			      \
+			         "If st,icf-div is defined, it's required to also provied st,icf-n"), \
+		    ());									      \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(index, st_icf_n),					      \
+		    BUILD_ASSERT(DT_INST_NODE_HAS_PROP(index, st_icf_div),			      \
+				 "st,icf-n can be defined only if st,icf-n is also provided"),	      \
+		    ());									      \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(index, st_icf_div),					      \
+		    BUILD_ASSERT(								      \
+			(DT_INST_PROP(index, st_icf_div) == 2) ||				      \
+			(DT_INST_PROP(index, st_icf_div) == 4) ||				      \
+			(DT_INST_PROP(index, st_icf_div) == 8) ||				      \
+			(DT_INST_PROP(index, st_icf_div) == 16) ||				      \
+			(DT_INST_PROP(index, st_icf_div) == 32),				      \
+			"st,icf-div can only be [2,4,8,16,32]"),				      \
+		   ());										      \
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(index, st_icf_n),					      \
+		    BUILD_ASSERT(								      \
+			(DT_INST_PROP(index, st_icf_n) == 5) ||					      \
+			(DT_INST_PROP(index, st_icf_n) == 6) ||					      \
+			(DT_INST_PROP(index, st_icf_n) == 8),					      \
+			"st,icf-n can only be [5,6,8]"),					      \
+		   ())
+#else
+#define CAPTURE_CHECK(index)
 #endif /* CONFIG_PWM_CAPTURE */
 
 #define DT_INST_CLK(index, inst)                                               \
@@ -898,6 +995,8 @@ static void pwm_stm32_irq_config_func_##index(const struct device *dev)		\
 		.pcfg = PINCTRL_DT_INST_DEV_CONFIG_GET(index),		       \
 		CAPTURE_INIT(index)					       \
 	};                                                                     \
+									       \
+	CAPTURE_CHECK(index);                                                  \
 									       \
 	DEVICE_DT_INST_DEFINE(index, &pwm_stm32_init, NULL,                    \
 			    &pwm_stm32_data_##index,                           \
