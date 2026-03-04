@@ -36,17 +36,23 @@ title: Zephyr snippet Schema
 description: Schema for validating Zephyr snippet files
 type: object
 $defs:
+  string-or-string-array:
+    oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
   append-schema:
     # Sub-schema for appending onto CMake list variables.
     # See uses under '$ref: "#/$defs/append-schema"' keys below.
     type: object
     properties:
       EXTRA_DTC_OVERLAY_FILE:
-        type: string
+        $ref: "#/$defs/string-or-string-array"
       EXTRA_CONF_FILE:
-        type: string
+        $ref: "#/$defs/string-or-string-array"
       SB_EXTRA_CONF_FILE:
-        type: string
+        $ref: "#/$defs/string-or-string-array"
       DTS_EXTRA_CPPFLAGS:
         type: string
     additionalProperties: false

@@ -57,20 +57,24 @@ class Snippet:
     def process_data(self, pathobj: Path, snippet_data: dict, sysbuild: bool):
         '''Process the data in a snippet.yml file, after it is loaded into a
         python object and validated by jsonschema.'''
-        def append_value(variable, value):
+        def as_abs_path(path):
+            path = pathobj.parent / value
+            if not path.is_file():
+                _err(f'snippet file {pathobj}: {variable}: file not found: {path}')
+            return f'"{path.as_posix()}"'
+
+        def extract_values(variable, value: str | list[str]):
             if variable in ('SB_EXTRA_CONF_FILE', 'EXTRA_DTC_OVERLAY_FILE', 'EXTRA_CONF_FILE'):
-                path = pathobj.parent / value
-                if not path.is_file():
-                    _err(f'snippet file {pathobj}: {variable}: file not found: {path}')
-                return f'"{path.as_posix()}"'
+                value_list = value if type(value) is list else [value]
+                return [as_abs_path(p) for p in value_list]
             if variable in ('DTS_EXTRA_CPPFLAGS'):
-                return f'"{value}"'
+                return [f'"{value}"']
             _err(f'unknown append variable: {variable}')
 
         for variable, value in snippet_data.get('append', {}).items():
             if (sysbuild is True and variable[0:3] == 'SB_') or \
             (sysbuild is False and variable[0:3] != 'SB_'):
-                self.appends[variable].append(append_value(variable, value))
+                self.appends[variable].extend(extract_values(variable, value))
         for board, settings in snippet_data.get('boards', {}).items():
             if board.startswith('/') and not board.endswith('/'):
                 _err(f"snippet file {pathobj}: board {board} starts with '/', so "
@@ -79,13 +83,13 @@ class Snippet:
                 for variable, value in appenddata.get('append', {}).items():
                     if (sysbuild is True and variable[0:3] == 'SB_') or \
                     (sysbuild is False and variable[0:3] != 'SB_'):
-                        self.board2appends[board][revision][variable].append(
-                            append_value(variable, value))
+                        self.board2appends[board][revision][variable].extend(
+                            extract_values(variable, value))
             for variable, value in settings.get('append', {}).items():
                 if (sysbuild is True and variable[0:3] == 'SB_') or \
                 (sysbuild is False and variable[0:3] != 'SB_'):
-                    self.board2appends[board][""][variable].append(
-                        append_value(variable, value))
+                    self.board2appends[board][""][variable].extend(
+                        extract_values(variable, value))
 
 class Snippets(UserDict):
     '''Type for all the information we have discovered about all snippets.
